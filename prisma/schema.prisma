@@ -1,0 +1,138 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Room / Cottage ───────────────────────────────────────────
+model Room {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  type        RoomType  // ROOM | COTTAGE
+  price       Int       // per night in INR
+  capacity    Int
+  size        String    // "320 sq ft"
+  description String
+  highlights  String[]
+  amenities   String[]
+  images      String[]  // array of image URLs / paths
+  badge       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  bookings    Booking[]
+  availability Availability[]
+}
+
+enum RoomType {
+  ROOM
+  COTTAGE
+}
+
+// ─── Availability (blocked dates) ────────────────────────────
+model Availability {
+  id        String   @id @default(uuid())
+  roomId    String
+  date      DateTime @db.Date   // one row per blocked date
+  isBooked  Boolean  @default(true)
+  bookingId String?
+
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, date])
+}
+
+// ─── User ─────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  bookings     Booking[]
+}
+
+// ─── Booking ──────────────────────────────────────────────────
+model Booking {
+  id              String        @id @default(uuid())
+  bookingRef      String        @unique  // e.g. VU-2024-0001
+  roomId          String
+  userId          String?       // null for guest bookings
+  
+  guestName       String
+  guestEmail      String
+  guestPhone      String
+  specialRequests String?
+  
+  checkIn         DateTime @db.Date
+  checkOut        DateTime @db.Date
+  nights          Int
+  guests          Int
+  
+  roomCost        Int
+  addonCost       Int
+  totalAmount     Int
+  
+  addons          Json     @default("[]")   // [{id, label, price}]
+  
+  status          BookingStatus @default(PENDING)
+  paymentType     PaymentType   // FULL | PARTIAL
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  room            Room     @relation(fields: [roomId], references: [id])
+  user            User?    @relation(fields: [userId], references: [id])
+  payment         Payment?
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentType {
+  FULL
+  PARTIAL
+}
+
+// ─── Payment ──────────────────────────────────────────────────
+model Payment {
+  id                String        @id @default(uuid())
+  bookingId         String        @unique
+  
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  
+  method            PaymentMethod // ONLINE | OFFLINE
+  amount            Int           // amount actually charged (in INR)
+  totalAmount       Int           // full booking total
+  
+  status            PaymentStatus @default(PENDING)
+  paidAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  booking           Booking  @relation(fields: [bookingId], references: [id])
+}
+
+enum PaymentMethod {
+  ONLINE
+  OFFLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
